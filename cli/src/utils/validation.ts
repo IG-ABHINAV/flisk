@@ -58,6 +58,33 @@ export function createKebabCaseValidator(context: "resource" | "stack") {
   };
 }
 
+// The schema only accepts a base path such as /storefront: lowercase letters, numbers, hyphens
+// and slashes, starting with a slash (the basePath entry in GENERATED_STRING_FIELDS in
+// service-manifest.ts). `flisk resource` writes --base-path to service.json as-is, so a value
+// that fails this pattern makes the project invalid right after a successful-looking create.
+export const FRONTEND_BASE_PATH_REGEX = /^\/[a-z0-9/-]*$/;
+
+export function validateFrontendBasePath(value: string): ValidationResult {
+  // A missing leading slash is fixed by normalizeFrontendBasePath (the engine reads it the
+  // same way), so check the value as it would be written — but quote what the user typed.
+  if (!FRONTEND_BASE_PATH_REGEX.test(normalizeFrontendBasePath(value))) {
+    return {
+      valid: false,
+      error: `--base-path "${value}" is not valid. Use lowercase letters, numbers, hyphens and slashes only, starting with /, e.g. "/storefront".`,
+    };
+  }
+  return { valid: true };
+}
+
+/**
+ * Add the leading slash a slash-less --base-path is missing, so the value written to
+ * service.json passes the schema check. The engine reads it the same way
+ * (get_frontend_base_path in api_path_constants.star), so `no-slash` behaves like `/no-slash`.
+ */
+export function normalizeFrontendBasePath(value: string): string {
+  return value.startsWith("/") ? value : `/${value}`;
+}
+
 export function validateOptionalInfraService(service: string): ValidationResult {
   if (includes(OPTIONAL_INFRA_SERVICES, service)) {
     return { valid: true };

@@ -49,7 +49,12 @@ import {
 } from "../../types/index.js";
 import { FliskError } from "../../utils/errors.js";
 import { discoverResourcesFromRoot } from "../../utils/services.js";
-import { KEBAB_CASE_REGEX } from "../../utils/validation.js";
+import {
+  FRONTEND_BASE_PATH_REGEX,
+  KEBAB_CASE_REGEX,
+  normalizeFrontendBasePath,
+  validateFrontendBasePath,
+} from "../../utils/validation.js";
 
 describe("resource command", () => {
   describe("resource name validation", () => {
@@ -73,6 +78,30 @@ describe("resource command", () => {
 
       for (const name of invalidNames) {
         expect(KEBAB_CASE_REGEX.test(name)).toBe(false);
+      }
+    });
+  });
+
+  describe("frontend --base-path validation", () => {
+    it("should accept a valid base path using FRONTEND_BASE_PATH_REGEX", () => {
+      for (const value of ["/storefront", "/shop/checkout", "/a-b-c/1"]) {
+        expect(FRONTEND_BASE_PATH_REGEX.test(value)).toBe(true);
+        expect(validateFrontendBasePath(value)).toEqual({ valid: true });
+        expect(normalizeFrontendBasePath(value)).toBe(value);
+      }
+    });
+
+    it("should add the missing leading slash, so the value passes the schema", () => {
+      expect(normalizeFrontendBasePath("no-slash")).toBe("/no-slash");
+      expect(validateFrontendBasePath("no-slash")).toEqual({ valid: true });
+    });
+
+    it("should reject a base path the schema does not accept", () => {
+      for (const value of ["Bad Path/x y", "/Storefront", "/has space", "has space"]) {
+        const result = validateFrontendBasePath(value);
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain(`--base-path "${value}" is not valid`);
+        expect(result.error).toContain('e.g. "/storefront"');
       }
     });
   });
@@ -940,6 +969,72 @@ function runResourceCli(projectRoot: string, args: string[], input = "") {
     encoding: "utf8",
   });
 }
+
+describe("resource command --base-path validation (#4162)", () => {
+  it("rejects a --base-path the schema does not accept, and writes nothing", () => {
+    const projectRoot = createResourceProject();
+    try {
+      const result = runResourceCli(projectRoot, [
+        "w5",
+        "--type",
+        "frontend",
+        "--base-path",
+        "Bad Path/x y",
+        "--yes",
+      ]);
+      const output = result.stdout + result.stderr;
+
+      expect(result.status).toBe(1);
+      expect(output).toContain('--base-path "Bad Path/x y" is not valid');
+      expect(output).toContain('e.g. "/storefront"');
+      expect(existsSync(join(projectRoot, "services", "main", "w5", "service.json"))).toBe(false);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("adds the missing leading slash, so the written service.json passes the schema", () => {
+    const projectRoot = createResourceProject();
+    try {
+      const result = runResourceCli(projectRoot, [
+        "w3",
+        "--type",
+        "frontend",
+        "--base-path",
+        "no-slash",
+        "--yes",
+      ]);
+      const manifestPath = join(projectRoot, "services", "main", "w3", "service.json");
+
+      expect(result.status).toBe(0);
+      expect(existsSync(manifestPath)).toBe(true);
+      expect(JSON.parse(readFileSync(manifestPath, "utf8")).basePath).toBe("/no-slash");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("writes a valid --base-path unchanged", () => {
+    const projectRoot = createResourceProject();
+    try {
+      const result = runResourceCli(projectRoot, [
+        "web",
+        "--type",
+        "frontend",
+        "--base-path",
+        "/storefront",
+        "--yes",
+      ]);
+      const manifestPath = join(projectRoot, "services", "main", "web", "service.json");
+
+      expect(result.status).toBe(0);
+      expect(existsSync(manifestPath)).toBe(true);
+      expect(JSON.parse(readFileSync(manifestPath, "utf8")).basePath).toBe("/storefront");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("resource command drizzle feature", () => {
   it("writes the Drizzle client, schema, config and /health/db route for a backend", () => {

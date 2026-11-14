@@ -30,7 +30,7 @@ import { applyLocalScaffold, localResourcePort } from "../utils/resource-local.j
 import { ResourceFilePlan } from "../utils/resource-plan.js";
 import { healthCheckPathOf, isHealthCheckDisabled, SERVICE_MANIFEST_SCHEMA_URL, SERVICE_MANIFEST_SCHEMA_VERSION, } from "../utils/service-manifest.js";
 import { discoverResources } from "../utils/services.js";
-import { createKebabCaseValidator, isPathSafe, validateResourceName, validateStackName, } from "../utils/validation.js";
+import { createKebabCaseValidator, isPathSafe, normalizeFrontendBasePath, validateFrontendBasePath, validateResourceName, validateStackName, } from "../utils/validation.js";
 export { getDockerfileTemplate, getShutdownHandlerTemplate, getTestTemplate, getWorkerIndexTemplate, } from "../generator/resource-templates.js";
 import { enforceFliskVersionGate } from "../utils/flisk-version-gate.js";
 export const BASE_TEMPLATE = {
@@ -736,6 +736,15 @@ export const resourceCommand = addYesOption(new Command("resource"))
             ]);
         }
         // Validate the agent options before anything is written, so a bad flag leaves no half-scaffolded directory.
+        // Likewise a frontend --base-path: it is written to service.json as-is, and the schema only
+        // accepts a path such as /storefront, so check it here and add a missing leading slash
+        // before anything is written. A value that still fails the pattern is rejected with the
+        // suggestion, the way --port and the resource name are.
+        let frontendBasePath = options.basePath;
+        if (resourceType === "frontend" && frontendBasePath !== undefined) {
+            assertValid(validateFrontendBasePath(frontendBasePath));
+            frontendBasePath = normalizeFrontendBasePath(frontendBasePath);
+        }
         let agentConfig;
         if (resourceType === "agent") {
             resolveAgentRuntime(options.runtime);
@@ -1208,7 +1217,7 @@ This file contains the resource configuration for Flisk.
         // Prepare file generation tasks
         const prismaEnabled = requestedFeatures.includes("prisma");
         const drizzleEnabled = requestedFeatures.includes("drizzle");
-        const serviceJson = createServiceJson(resourceName, resourceType, stackName, assignedPort, [...(dddEnabled ? ["ddd"] : []), ...requestedFeatures], scaffoldFrameworkId, options.language === undefined ? undefined : backendLanguage?.id, agentConfig, resourceType === "frontend" ? options.basePath : undefined);
+        const serviceJson = createServiceJson(resourceName, resourceType, stackName, assignedPort, [...(dddEnabled ? ["ddd"] : []), ...requestedFeatures], scaffoldFrameworkId, options.language === undefined ? undefined : backendLanguage?.id, agentConfig, resourceType === "frontend" ? frontendBasePath : undefined);
         const packageJson = createPackageJson(resourceName, resourceType, scaffoldFrameworkId, prismaEnabled, agentConfig, drizzleEnabled);
         if (prismaEnabled && resourceType === "backend") {
             serviceJson.dependsOn = [`${resourceName}-migrator`];

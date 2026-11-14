@@ -4,6 +4,14 @@ export declare const MAX_NAME_LENGTH = 63;
 export declare function validateResourceName(name: string): ValidationResult;
 export declare function validateStackName(name: string): ValidationResult;
 export declare function createKebabCaseValidator(context: "resource" | "stack"): (input: string) => true | string;
+export declare const FRONTEND_BASE_PATH_REGEX: RegExp;
+export declare function validateFrontendBasePath(value: string): ValidationResult;
+/**
+ * Add the leading slash a slash-less --base-path is missing, so the value written to
+ * service.json passes the schema check. The engine reads it the same way
+ * (get_frontend_base_path in api_path_constants.star), so `no-slash` behaves like `/no-slash`.
+ */
+export declare function normalizeFrontendBasePath(value: string): string;
 export declare function validateOptionalInfraService(service: string): ValidationResult;
 /**
  * Validate that a port is a valid TCP/UDP port number (1-65535).

@@ -97,6 +97,8 @@ import { discoverResources } from "../utils/services.js";
 import {
   createKebabCaseValidator,
   isPathSafe,
+  normalizeFrontendBasePath,
+  validateFrontendBasePath,
   validateResourceName,
   validateStackName,
 } from "../utils/validation.js";
@@ -1043,6 +1045,15 @@ export const resourceCommand = addYesOption(new Command("resource"))
         ]);
       }
       // Validate the agent options before anything is written, so a bad flag leaves no half-scaffolded directory.
+      // Likewise a frontend --base-path: it is written to service.json as-is, and the schema only
+      // accepts a path such as /storefront, so check it here and add a missing leading slash
+      // before anything is written. A value that still fails the pattern is rejected with the
+      // suggestion, the way --port and the resource name are.
+      let frontendBasePath = options.basePath;
+      if (resourceType === "frontend" && frontendBasePath !== undefined) {
+        assertValid(validateFrontendBasePath(frontendBasePath));
+        frontendBasePath = normalizeFrontendBasePath(frontendBasePath);
+      }
       let agentConfig: AgentConfig | undefined;
       if (resourceType === "agent") {
         resolveAgentRuntime(options.runtime);
@@ -1646,7 +1657,7 @@ This file contains the resource configuration for Flisk.
         scaffoldFrameworkId,
         options.language === undefined ? undefined : backendLanguage?.id,
         agentConfig,
-        resourceType === "frontend" ? options.basePath : undefined,
+        resourceType === "frontend" ? frontendBasePath : undefined,
       );
       const packageJson = createPackageJson(
         resourceName,
